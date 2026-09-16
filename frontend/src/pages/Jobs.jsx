@@ -658,8 +658,17 @@ function Jobs() {
           !filters.savedOnly ||
           job.saved;
 
+        /* Closed Application Registration check (automatically removed) */
+        const isClosed =
+          job.isClosed === true ||
+          job.status === "closed" ||
+          job.status === "expired" ||
+          (job.deadline &&
+            !isNaN(new Date(job.deadline).getTime()) &&
+            new Date(job.deadline).getTime() < Date.now());
 
         return (
+          !isClosed &&
           matchesSearch &&
           matchesLocation &&
           matchesJobType &&
@@ -1690,13 +1699,20 @@ const handleApply = async (job) => {
                       )}
 
 
-                      {job.deadline && (
+                      {job.deadline ? (
 
                         <span className="job-deadline">
                           Deadline{" "}
                           {formatDate(
                             job.deadline
                           )}
+                        </span>
+
+                      ) : (
+
+                        <span className="job-recruitment-live">
+                          <span className="live-recruitment-dot" />
+                          Live Recruitment
                         </span>
 
                       )}

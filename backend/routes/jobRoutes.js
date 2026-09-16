@@ -5,6 +5,7 @@ const {
   getJobById,
   toggleSaveJob,
   getSavedJobs,
+  closeJobApplication,
 } = require("../controllers/jobController");
 
 const router =
@@ -55,6 +56,17 @@ SAVE / UNSAVE
 router.patch(
   "/:id/save",
   toggleSaveJob
+);
+
+/*
+==================================================
+CLOSE JOB REGISTRATION & REMOVE FROM MODULE
+==================================================
+*/
+
+router.post(
+  "/:id/close",
+  closeJobApplication
 );
 
 module.exports =

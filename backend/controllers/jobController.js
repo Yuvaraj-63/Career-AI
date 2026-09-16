@@ -1,6 +1,13 @@
 const fs = require("fs");
 const path = require("path");
 
+// Adzuna Live Recruitment API
+const ADZUNA_APP_ID = process.env.ADZUNA_APP_ID || "";
+const ADZUNA_APP_KEY =
+  process.env.ADZUNA_APP_KEY || "0d1db3096c41493f11dfa0f0fc95d46f";
+const ADZUNA_COUNTRY = process.env.ADZUNA_COUNTRY || "in";
+
+// Secondary / Fallback Provider
 const API_URL =
   process.env.JOBS_API_URL || "https://jobs.indianapi.in/jobs";
 
@@ -310,13 +317,46 @@ function normalizeJob(job) {
       job.source ||
       "IndianAPI Jobs",
 
+    isClosed: Boolean(job.isClosed),
+
     saved:
       savedJobs.has(String(id)),
   };
 }
 
 // ==========================================================
-// FILTER REAL JOBS ONLY
+// CHECK IF JOB APPLICATION REGISTRATION IS OPEN
+// ==========================================================
+
+function isJobOpen(job) {
+  if (!job) return false;
+
+  // 1. Explicit closed or expired status
+  if (
+    job.isClosed === true ||
+    job.status === "closed" ||
+    job.status === "expired"
+  ) {
+    return false;
+  }
+
+  // 2. Application deadline check
+  if (job.deadline) {
+    const deadlineDate = new Date(job.deadline);
+    if (
+      !isNaN(deadlineDate.getTime()) &&
+      deadlineDate.getTime() < Date.now()
+    ) {
+      // Application deadline has passed; remove job
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// ==========================================================
+// FILTER REAL & OPEN JOBS ONLY
 // ==========================================================
 
 function filterRealJobs(jobs) {
@@ -328,16 +368,17 @@ function filterRealJobs(jobs) {
     .map(normalizeJob)
     .filter((job) => {
       /*
-       * HARD RULE:
-       *
-       * A job without a valid real application
-       * URL must NEVER reach the frontend.
+       * HARD RULES:
+       * 1. Valid ID, title, company
+       * 2. Valid HTTP/HTTPS application URL
+       * 3. Application registration must be OPEN (closed/expired jobs removed)
        */
       return (
         Boolean(job.id) &&
         Boolean(job.title) &&
         Boolean(job.company) &&
-        Boolean(job.applicationUrl)
+        Boolean(job.applicationUrl) &&
+        isJobOpen(job)
       );
     });
 }
@@ -640,108 +681,169 @@ function filterAndLimitJobs(
 }
 
 // ==========================================================
-// FETCH LIVE JOBS FROM INDIANAPI
+// FETCH LIVE JOBS FROM ADZUNA RECRUITMENT API
+// ==========================================================
+
+async function fetchJobsFromAdzuna(page = 1) {
+  if (!ADZUNA_APP_ID || !ADZUNA_APP_KEY) {
+    throw new Error(
+      "Adzuna credentials not fully configured. Set ADZUNA_APP_ID and ADZUNA_APP_KEY in .env"
+    );
+  }
+
+  const endpoint = `https://api.adzuna.com/v1/api/jobs/${ADZUNA_COUNTRY}/search/${page}?app_id=${ADZUNA_APP_ID}&app_key=${ADZUNA_APP_KEY}&results_per_page=50&content-type=application/json`;
+
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    let message = `Adzuna API returned HTTP ${response.status}`;
+    try {
+      const parsed = JSON.parse(errorText);
+      if (parsed.display || parsed.exception) {
+        message = `Adzuna: ${parsed.display || parsed.exception}`;
+      }
+    } catch {
+      // ignore
+    }
+    const err = new Error(message);
+    err.status = response.status;
+    throw err;
+  }
+
+  const data = await response.json();
+  const results = Array.isArray(data?.results) ? data.results : [];
+
+  if (results.length === 0) {
+    const err = new Error("Adzuna returned no active jobs.");
+    err.status = 204;
+    throw err;
+  }
+
+  return results.map((item) => {
+    let salary = "";
+    if (item.salary_min && item.salary_max) {
+      salary = `₹${Math.round(item.salary_min).toLocaleString("en-IN")} - ₹${Math.round(item.salary_max).toLocaleString("en-IN")}`;
+    } else if (item.salary_min) {
+      salary = `₹${Math.round(item.salary_min).toLocaleString("en-IN")}+`;
+    } else if (item.salary_max) {
+      salary = `Up to ₹${Math.round(item.salary_max).toLocaleString("en-IN")}`;
+    }
+
+    const locationName =
+      item.location?.display_name ||
+      (Array.isArray(item.location?.area)
+        ? item.location.area.slice(0, 3).reverse().join(", ")
+        : "India");
+
+    return {
+      id: String(item.id),
+      title: item.title,
+      company: item.company?.display_name || "Company",
+      location: locationName,
+      type:
+        item.contract_time === "part_time"
+          ? "Part-time"
+          : item.contract_time === "contract"
+          ? "Contract"
+          : "Full-time",
+      experience:
+        item.contract_type === "permanent"
+          ? "Permanent / Experienced"
+          : "Full-time / Fresher / Experienced",
+      salary,
+      description: item.description,
+      applicationUrl: item.redirect_url,
+      applyLink: item.redirect_url,
+      postedDate: item.created,
+      deadline: null,
+      isClosed: false,
+      source: "Adzuna (Live Recruitment)",
+    };
+  });
+}
+
+// ==========================================================
+// FETCH LIVE JOBS FROM PROVIDER (ADZUNA / FALLBACK)
 // ==========================================================
 
 async function fetchJobsFromProvider() {
-  if (!API_KEY) {
-    const error =
-      new Error(
-        "JOBS_API_KEY is not configured."
-      );
+  // 1. Try Adzuna Live Jobs first (preferred live provider)
+  if (ADZUNA_APP_ID && ADZUNA_APP_KEY) {
+    try {
+      console.log("Fetching live real-time jobs from Adzuna API...");
+      const adzunaJobs = await fetchJobsFromAdzuna(1);
+      const realJobs = filterRealJobs(adzunaJobs);
 
-    error.status = 500;
-
-    throw error;
-  }
-
-  const response =
-    await fetch(
-      API_URL,
-      {
-        method: "GET",
-
-        headers: {
-          "X-Api-Key":
-            API_KEY,
-
-          Accept:
-            "application/json",
-        },
+      if (realJobs.length > 0) {
+        console.log(
+          `Adzuna returned ${adzunaJobs.length} live jobs (${realJobs.length} open and verified).`
+        );
+        return realJobs;
       }
-    );
-
-  const rawText =
-    await response.text();
-
-  let data;
-
-  try {
-    data =
-      rawText
-        ? JSON.parse(rawText)
-        : null;
-  } catch {
-    data = null;
-  }
-
-  if (!response.ok) {
-    const error =
-      new Error(
-        data?.message ||
-          data?.error ||
-          `Jobs provider returned HTTP ${response.status}`
+    } catch (adzunaError) {
+      console.warn(
+        "Adzuna fetch failed, falling back to secondary provider:",
+        adzunaError.message
       );
-
-    error.status =
-      response.status;
-
-    throw error;
+    }
+  } else if (ADZUNA_APP_KEY && !ADZUNA_APP_ID) {
+    console.warn(
+      "Adzuna: ADZUNA_APP_KEY is set, but ADZUNA_APP_ID is missing. Waiting for Application ID to stream from Adzuna."
+    );
   }
 
-  const jobs =
-    Array.isArray(data?.data)
-      ? data.data
-      : Array.isArray(data)
-        ? data
-        : Array.isArray(data?.jobs)
+  // 2. Fallback provider (IndianAPI)
+  if (API_KEY) {
+    try {
+      console.log("Fetching from fallback provider (IndianAPI)...");
+      const response = await fetch(API_URL, {
+        method: "GET",
+        headers: {
+          "X-Api-Key": API_KEY,
+          Accept: "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const rawText = await response.text();
+        let data = null;
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          data = null;
+        }
+
+        const rawJobs = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data)
+          ? data
+          : Array.isArray(data?.jobs)
           ? data.jobs
           : [];
 
-  if (jobs.length === 0) {
-    const error =
-      new Error(
-        "IndianAPI returned no jobs."
-      );
+        const realJobs = filterRealJobs(rawJobs);
 
-    error.status = 204;
-
-    throw error;
+        if (realJobs.length > 0) {
+          console.log(
+            `Fallback provider returned ${rawJobs.length} jobs (${realJobs.length} open and verified).`
+          );
+          return realJobs;
+        }
+      }
+    } catch (fallbackError) {
+      console.warn("Fallback provider error:", fallbackError.message);
+    }
   }
 
-  /*
-   * Filter immediately after receiving
-   * the provider response.
-   */
-  const realJobs =
-    filterRealJobs(jobs);
-
-  console.log(
-    `IndianAPI returned ${jobs.length} jobs. ${realJobs.length} have valid application links.`
+  throw new Error(
+    "No live jobs provider could be reached. Please check ADZUNA_APP_ID and ADZUNA_APP_KEY."
   );
-
-  if (realJobs.length === 0) {
-    const error =
-      new Error(
-        "IndianAPI returned jobs, but none had a valid application link."
-      );
-
-    error.status = 422;
-
-    throw error;
-  }
-
-  return realJobs;
 }
 
 // ==========================================================
@@ -1130,6 +1232,37 @@ const getSavedJobs =
   };
 
 // ==========================================================
+// CLOSE JOB REGISTRATION & REMOVE FROM MODULE
+// ==========================================================
+
+const closeJobApplication = (req, res) => {
+  const requestedId = String(req.params.id);
+
+  // Filter out the closed job from in-memory cache
+  const initialCount = jobsCache.length;
+  jobsCache = jobsCache.filter(
+    (job) => String(job.id) !== requestedId
+  );
+
+  // Write updated cache to disk
+  writeDiskCache(jobsCache);
+
+  console.log(
+    `Job ${requestedId} registration closed. Removed from job module (cache count: ${jobsCache.length}).`
+  );
+
+  return res.json({
+    success: true,
+    message: `Job ${requestedId} registration is now closed and removed from active listings.`,
+    data: {
+      jobId: requestedId,
+      removed: initialCount > jobsCache.length,
+      remainingCount: jobsCache.length,
+    },
+  });
+};
+
+// ==========================================================
 // EXPORTS
 // ==========================================================
 
@@ -1138,4 +1271,5 @@ module.exports = {
   getJobById,
   toggleSaveJob,
   getSavedJobs,
+  closeJobApplication,
 };

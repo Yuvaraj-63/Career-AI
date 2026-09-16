@@ -19,7 +19,9 @@
     "deadline": null,
     "applicationUrl": "https://ibqbjb.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/Honeywell/job/157582",
     "source": "Live Job Provider",
-    "saved": false
+    "saved": false,
+    "applyLink": "https://ibqbjb.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/Honeywell/job/157582",
+    "isClosed": false
   },
   {
     "id": "2",
@@ -37,13 +39,16 @@
       "C",
       "Data Science",
       "Algorithms",
-      "Computer Science"
+      "Computer Science",
+      "algorithms"
     ],
     "postedDate": "2026-09-10T02:45:00",
     "deadline": null,
     "applicationUrl": "https://apply.careers.microsoft.com/careers/job/1970393556971804",
     "source": "Live Job Provider",
-    "saved": false
+    "saved": false,
+    "applyLink": "https://apply.careers.microsoft.com/careers/job/1970393556971804",
+    "isClosed": false
   },
   {
     "id": "3",
@@ -64,7 +69,9 @@
     "deadline": null,
     "applicationUrl": "https://www.jobs.global.fujitsu.com/job/Apprentices%2C-Interns%2C-Industrial-Placements/11628-en_US",
     "source": "Live Job Provider",
-    "saved": false
+    "saved": false,
+    "applyLink": "https://www.jobs.global.fujitsu.com/job/Apprentices%2C-Interns%2C-Industrial-Placements/11628-en_US",
+    "isClosed": false
   },
   {
     "id": "4",
@@ -87,7 +94,9 @@
     "deadline": null,
     "applicationUrl": "https://burnsmcd.jobs/mumbai-ind/junior-assistant-civil-af-csa-2027-batch-campus-recruitment/A1C80C2D4B074C96A79FA35497E3555F/job/",
     "source": "Live Job Provider",
-    "saved": false
+    "saved": false,
+    "applyLink": "https://burnsmcd.jobs/mumbai-ind/junior-assistant-civil-af-csa-2027-batch-campus-recruitment/A1C80C2D4B074C96A79FA35497E3555F/job/",
+    "isClosed": false
   },
   {
     "id": "5",
@@ -108,7 +117,9 @@
     "deadline": null,
     "applicationUrl": "https://careers.quest-global.com/global/en/job/QGRQGAGLOBALP122589EXTERNALENGLOBAL/Fresher-Rehire",
     "source": "Live Job Provider",
-    "saved": false
+    "saved": false,
+    "applyLink": "https://careers.quest-global.com/global/en/job/QGRQGAGLOBALP122589EXTERNALENGLOBAL/Fresher-Rehire",
+    "isClosed": false
   },
   {
     "id": "6",
@@ -131,6 +142,8 @@
     "deadline": null,
     "applicationUrl": "https://www.spglobal.com/en/careers",
     "source": "Live Job Provider",
-    "saved": false
+    "saved": false,
+    "applyLink": "https://www.spglobal.com/en/careers",
+    "isClosed": false
   }
 ]
